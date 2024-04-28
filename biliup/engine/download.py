@@ -70,6 +70,7 @@ class DownloadBase(ABC):
 
     def download(self):
         self.danmaku_download_start(self.gen_download_filename())
+        return self.ffmpeg_segment_download()
         if self.is_download:
             if not shutil.which("ffmpeg"):
                 logger.error("未安装 FFMpeg 或不存在于 PATH 内")
@@ -219,23 +220,26 @@ class DownloadBase(ABC):
         """
         exclude_ext_file_name = os.path.splitext(file_name)[0]
         danmaku_file_name = exclude_ext_file_name + '.xml'
-        self.danmaku_segment(danmaku_file_name)
-        # 将文件名和直播标题存储到数据库
-        with SessionLocal() as db:
-            update_room_title(db, self.database_row_id, self.room_title)
-            update_file_list(db, self.database_row_id, file_name)
-        if self.segment_processor:
-            try:
-                from biliup.common.tools import processor
-                data = os.path.abspath(file_name)
-                if os.path.exists(danmaku_file_name):
-                    data += f'\n{os.path.abspath(danmaku_file_name)}'
-                thread = threading.Thread(target=processor, args=(self.segment_processor, data), daemon=True,
-                                          name=f"segment_processor_{exclude_ext_file_name}")
-                thread.start()
-                self.segment_processor_thread.append(thread)
-            except:
-                logger.warning(f'执行后处理失败：{self.__class__.__name__} - {self.fname}', exc_info=True)
+
+        def x():
+            # 将文件名和直播标题存储到数据库
+            with SessionLocal() as db:
+                update_room_title(db, self.database_row_id, self.room_title)
+                update_file_list(db, self.database_row_id, file_name)
+            self.danmaku_segment(danmaku_file_name)
+            if self.segment_processor:
+                try:
+                    from biliup.common.tools import processor
+                    data = os.path.abspath(file_name)
+                    if os.path.exists(danmaku_file_name):
+                        data += f'\n{os.path.abspath(danmaku_file_name)}'
+                    processor(self.segment_processor, data)
+                except:
+                    logger.warning(f'执行后处理失败：{self.__class__.__name__} - {self.fname}', exc_info=True)
+
+        thread = threading.Thread(target=x, daemon=True, name=f"segment_processor_{exclude_ext_file_name}")
+        thread.start()
+        self.segment_processor_thread.append(thread)
 
     def download_success_callback(self):
         pass

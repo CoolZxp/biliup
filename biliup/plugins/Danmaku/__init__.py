@@ -137,8 +137,7 @@ class DanmakuClient:
 
         def write_file(filename):
             try:
-                with open(filename, "wb") as f:
-                    tree.write(f, encoding="UTF-8", xml_declaration=True, pretty_print=True)
+                tree.write(filename, encoding="UTF-8", xml_declaration=True, pretty_print=True)
             except Exception as e:
                 logger.warning(f"{DanmakuClient.__name__}:{self.__url}: 弹幕写入异常 - {e}")
 
@@ -194,21 +193,32 @@ class DanmakuClient:
 
     def segment(self, new_prev_file_name=None):
         if self.__record_task and self.__loop:
-            if new_prev_file_name and self.__fmt_file_name and new_prev_file_name != self.__fmt_file_name:
-                try:
-                    if os.path.exists(self.__fmt_file_name):
-                        os.rename(self.__fmt_file_name, new_prev_file_name)
-                        logger.info(
-                            f"{DanmakuClient.__name__}:{self.__url}: 更名 {self.__fmt_file_name} 为 {new_prev_file_name}")
-                except:
-                    logger.error(
-                        f"{DanmakuClient.__name__}:{self.__url}: 更名 {self.__fmt_file_name} 为 {new_prev_file_name} 失败",
-                        exc_info=True)
-            self.__fmt_file_name = time.strftime(self.__file_name.encode("unicode-escape").decode()).encode().decode(
-                "unicode-escape") + '.xml'
+            old_file_name = f"{self.__fmt_file_name}"
+            new_file_name = f"{new_prev_file_name}"
+
             self.__start_time = time.time()
+            cancel_event = threading.Event()
             if self.__print_task:
+                self.__print_task.add_done_callback(lambda _: cancel_event.set())
                 self.__print_task.cancel()
+
+                if new_file_name and old_file_name and new_file_name != old_file_name:
+                    cancel_event.wait()
+                    print(new_file_name)
+                    print(old_file_name)
+                    try:
+                        print(old_file_name)
+                        print(os.path.exists(old_file_name))
+                        if os.path.exists(old_file_name):
+                            os.rename(old_file_name, new_file_name)
+                            logger.info(
+                                f"{DanmakuClient.__name__}:{self.__url}: 更名 {old_file_name} 为 {new_file_name}")
+                    except:
+                        logger.error(
+                            f"{DanmakuClient.__name__}:{self.__url}: 更名 {old_file_name} 为 {new_file_name} 失败",
+                            exc_info=True)
+            self.__fmt_file_name = time.strftime(self.__file_name.encode("unicode-escape").decode()).encode().decode(
+                "unicode-escape") + '1.xml'
             self.__print_task = self.__loop.create_task(self.__print_danmaku(self.__fmt_file_name))
 
     def stop(self):
